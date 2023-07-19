@@ -679,39 +679,19 @@ public class UIManager : MonoBehaviour
                     continue;
                 }
 
+                var panelInfo = _panelInfoDict[panelName];
+                if ((int)panelInfo.Life <= -1) continue;
+
                 if (panel.IsShowed || panel.IsShowInProgress) continue;
 
                 panel.LifeTimer += Time.deltaTime * _frameMax;
 
-                if (panel.LifeTimer > GetLifeTime(_panelInfoDict[panelName].Life))
+                if (panel.LifeTimer > (int)panelInfo.Life)
                 {
                     DestroyPanel(panelName);
                 }
             }
         }
-    }
-
-    private int GetLifeTime(UILife life)
-    {
-        int time = int.MaxValue;
-
-        switch (life)
-        {
-            case UILife.S0:
-                time = 0;
-                break;
-            case UILife.S30:
-                time = 3;
-                break;
-            case UILife.M1:
-                time = 60;
-                break;
-            case UILife.M3:
-                time = 180;
-                break;
-        }
-
-        return time;
     }
 
     #endregion
