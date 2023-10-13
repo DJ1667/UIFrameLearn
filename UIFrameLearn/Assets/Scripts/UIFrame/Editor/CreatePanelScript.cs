@@ -34,6 +34,7 @@ public class CreatePanelScript
                     Directory.CreateDirectory(config.PrefabPath);
                 }
                 PrefabUtility.SaveAsPrefabAsset(go, config.PrefabPath + obj.name + ".prefab");
+                Debug.Log("预制生成成功：  "+ obj.name + ".prefab");
             }
         }
         EditorPrefs.SetString("CreatingCs", csNameStr);

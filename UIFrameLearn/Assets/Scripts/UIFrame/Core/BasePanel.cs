@@ -18,6 +18,8 @@ public class BasePanel : MonoBehaviour
 
     private bool _isInitialized;
 
+    protected bool _forceNoImmediate = false;
+
     private CanvasGroup _canvasGroup;
 
     public CanvasGroup CanvasGroup
@@ -67,7 +69,7 @@ public class BasePanel : MonoBehaviour
         }
     }
 
-    public void Show(bool immediate = false, Action<BasePanel> startAction = null,
+    public void Show(bool immediate = true, Action<BasePanel> startAction = null,
         Action<BasePanel> finishAction = null)
     {
         if (startAction != null)
@@ -83,7 +85,7 @@ public class BasePanel : MonoBehaviour
         OnShowStart(immediate);
     }
 
-    public void Hide(bool immediate = false, Action<BasePanel> startAction = null,
+    public void Hide(bool immediate = true, Action<BasePanel> startAction = null,
         Action<BasePanel> finishAction = null)
     {
         if (startAction != null)
@@ -123,8 +125,7 @@ public class BasePanel : MonoBehaviour
         ShowStartAction?.Invoke(this);
         ShowStartAction = null;
 
-        immediate = true;
-        if (immediate)
+        if (immediate && !_forceNoImmediate)
         {
             //立即显示
             // transform.localScale = Vector3.one;
@@ -133,6 +134,7 @@ public class BasePanel : MonoBehaviour
         }
         else
         {
+            _forceNoImmediate = false;
             StartShowAnimation();
         }
     }
@@ -154,8 +156,7 @@ public class BasePanel : MonoBehaviour
         HideStartAction?.Invoke(this);
         HideStartAction = null;
 
-        immediate = true;
-        if (immediate)
+        if (immediate && !_forceNoImmediate)
         {
             //立即隐藏
             // transform.localScale = Vector3.zero;
@@ -165,6 +166,7 @@ public class BasePanel : MonoBehaviour
         }
         else
         {
+            _forceNoImmediate = false;
             StartHideAnimation();
         }
     }
@@ -221,7 +223,7 @@ public class BasePanel : MonoBehaviour
         });
     }
 
-    private GameObject CreateTempMask()
+    protected GameObject CreateTempMask()
     {
         var obj = new GameObject("TempMask");
         obj.transform.SetParent(transform);

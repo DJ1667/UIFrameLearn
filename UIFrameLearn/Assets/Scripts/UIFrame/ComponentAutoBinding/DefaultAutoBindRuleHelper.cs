@@ -17,7 +17,7 @@ public class DefaultAutoBindRuleHelper : IAutoBindRuleHelper
         {"OldAnim","Animation"}, 
         {"NewAnim","Animator"},
 
-        {"Rect","RectTransform"},
+        {"RectTrans","RectTransform"},
         {"Canvas","Canvas"},
         {"Group","CanvasGroup"},
         {"VGroup","VerticalLayoutGroup"},

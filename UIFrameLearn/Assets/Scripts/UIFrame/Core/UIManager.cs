@@ -3,10 +3,13 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.U2D;
 using UnityEngine.UI;
 #if ADDRESSABLE
 using UnityEngine.ResourceManagement.AsyncOperations;
+
 #endif
 
 public class UIManager : MonoBehaviour
@@ -19,16 +22,17 @@ public class UIManager : MonoBehaviour
     private RectTransform _rectTransform;
 
     public Canvas MainCanvas => _mainCanvas;
+
+    private Camera _uiCamera;
+
     public Camera UICamera
     {
-        get
-        {
-            if (_mainCanvas.renderMode == RenderMode.ScreenSpaceCamera)
-                return _mainCanvas.worldCamera;
-            else
-                return null;
-        }
+        get { return _uiCamera; }
     }
+
+    [HideInInspector] public Vector2 CanvasSize = Vector2.zero;
+
+    private Dictionary<UILayer, RectTransform> _layerRootDict = new Dictionary<UILayer, RectTransform>();
 
     #endregion
 
@@ -42,7 +46,7 @@ public class UIManager : MonoBehaviour
     private Dictionary<string, BasePanel> _panelDict = new Dictionary<string, BasePanel>(); //panel的实例
 
     private PanelInfoAttribute _curPanelInfo = null;
-    private LinkedList<PanelInfoAttribute> _panelLinkedList = new LinkedList<PanelInfoAttribute>();//打开的界面
+    private LinkedList<PanelInfoAttribute> _panelLinkedList = new LinkedList<PanelInfoAttribute>(); //打开的界面
     private Dictionary<UILayer, int> _layerPanelNumDict = new Dictionary<UILayer, int>(); //记录每个层级中有多少个界面
     private Dictionary<string, Dictionary<string, int>> _panelCanvasOriginalValDict = new Dictionary<string, Dictionary<string, int>>();
 
@@ -67,8 +71,10 @@ public class UIManager : MonoBehaviour
     private void Awake()
     {
         Instance = this;
+        _uiCamera = transform.Find("Camera").GetComponent<Camera>();
         _mainCanvas = transform.Find("Canvas").GetComponent<Canvas>();
         _rectTransform = _mainCanvas.GetComponent<RectTransform>();
+        CanvasSize = _rectTransform.sizeDelta;
         Init();
     }
 
@@ -130,7 +136,7 @@ public class UIManager : MonoBehaviour
             can.overrideSorting = true;
             if (Enum.TryParse<UILayer>(layer, out UILayer uil))
             {
-                can.sortingOrder = (int)uil;
+                can.sortingOrder = (int) uil;
             }
         }
     }
@@ -185,7 +191,7 @@ public class UIManager : MonoBehaviour
     /// <param name="startAction">打开前回调</param>
     /// <param name="finishAction">打开后回调</param>
     /// <typeparam name="T"></typeparam>
-    public void OpenPanel<T>(bool immediate = false, Action<BasePanel> startAction = null,
+    public void OpenPanel<T>(bool immediate = true, Action<BasePanel> startAction = null,
         Action<BasePanel> finishAction = null)
         where T : BasePanel
     {
@@ -212,7 +218,7 @@ public class UIManager : MonoBehaviour
     /// <param name="immediate">是否跳过动画立即打开</param>
     /// <param name="startAction">打开前回调</param>
     /// <param name="finishAction">打开后回调</param>
-    public void OpenPanel(string tName, bool immediate = false, Action<BasePanel> startAction = null,
+    public void OpenPanel(string tName, bool immediate = true, Action<BasePanel> startAction = null,
         Action<BasePanel> finishAction = null)
     {
         // Debug.LogError("打开界面 " + tName);
@@ -265,7 +271,7 @@ public class UIManager : MonoBehaviour
     /// <param name="startAction">关闭前回调</param>
     /// <param name="finishAction">关闭后回调</param>
     /// <typeparam name="T"></typeparam>
-    public void ClosePanel<T>(bool immediate = false, Action<BasePanel> startAction = null,
+    public void ClosePanel<T>(bool immediate = true, Action<BasePanel> startAction = null,
         Action<BasePanel> finishAction = null)
         where T : BasePanel
     {
@@ -275,7 +281,7 @@ public class UIManager : MonoBehaviour
     }
 
     public void ClosePanel(string tName, Action<BasePanel> startAction = null,
-       Action<BasePanel> finishAction = null)
+        Action<BasePanel> finishAction = null)
     {
         ClosePanel(tName, false, startAction, finishAction);
     }
@@ -287,7 +293,7 @@ public class UIManager : MonoBehaviour
     /// <param name="immediate">是否跳过动画立即关闭</param>
     /// <param name="startAction">关闭前回调</param>
     /// <param name="finishAction">关闭后回调</param>
-    public void ClosePanel(string tName, bool immediate = false, Action<BasePanel> startAction = null,
+    public void ClosePanel(string tName, bool immediate = true, Action<BasePanel> startAction = null,
         Action<BasePanel> finishAction = null)
     {
         if (_panelDict.ContainsKey(tName))
@@ -324,7 +330,7 @@ public class UIManager : MonoBehaviour
         return null;
     }
 
-    private BasePanel GetPanel(string typeName)
+    public BasePanel GetPanel(string typeName)
     {
         if (_panelDict.ContainsKey(typeName))
         {
@@ -342,7 +348,7 @@ public class UIManager : MonoBehaviour
 
     #region 私有
 
-    private void CreatePanel(PanelInfoAttribute panelInfo, bool immediate = false,
+    private void CreatePanel(PanelInfoAttribute panelInfo, bool immediate = true,
         Action<BasePanel> startAction = null,
         Action<BasePanel> finishAction = null)
     {
@@ -390,7 +396,7 @@ public class UIManager : MonoBehaviour
         }
     }
 
-    private void CreatePanel(GameObject prefab, PanelInfoAttribute panelInfo, bool immediate = false,
+    private void CreatePanel(GameObject prefab, PanelInfoAttribute panelInfo, bool immediate = true,
         Action<BasePanel> startAction = null,
         Action<BasePanel> finishAction = null)
     {
@@ -401,11 +407,12 @@ public class UIManager : MonoBehaviour
             Debug.LogError($"无法获取 {panelInfo.Name} 脚本，检查是否挂载");
         panel.Initialize();
         _panelDict.Add(panelInfo.Name, panel);
+        panel.gameObject.SetActiveEx(false);
 
         ShowPanel(panelInfo, panel, immediate, startAction, finishAction);
     }
 
-    private void ShowPanel(PanelInfoAttribute panelInfo, BasePanel panel, bool immediate = false,
+    private void ShowPanel(PanelInfoAttribute panelInfo, BasePanel panel, bool immediate = true,
         Action<BasePanel> startAction = null,
         Action<BasePanel> finishAction = null)
     {
@@ -415,20 +422,28 @@ public class UIManager : MonoBehaviour
             if (_panelLinkedList.Count > 0)
             {
                 var stackTopPanelInfo = _panelLinkedList.Last.Value;
-                GetPanel(stackTopPanelInfo.Name)?.LoseFocus();
+                if (panelInfo.Name != "UICurrencyPanel")
+                {
+                    GetPanel(stackTopPanelInfo.Name)?.LoseFocus();
+                }
             }
         }
 
         panel.Show(immediate, startAction, finishAction);
         panel.SelfGameObject.transform.SetAsLastSibling();
 
-        AddToLinkedList(panelInfo);
-        _curPanelInfo = _panelLinkedList.Last.Value;
+        if (panelInfo.Name != "UICurrencyPanel")
+        {
+            AddToLinkedList(panelInfo);
+        }
+
+        if (_panelLinkedList.Count > 0)
+            _curPanelInfo = _panelLinkedList.Last.Value;
 
         ReSetCanvasOrder(panelInfo);
     }
 
-    private void HidePanel(PanelInfoAttribute panelInfo, BasePanel panel, bool immediate = false,
+    private void HidePanel(PanelInfoAttribute panelInfo, BasePanel panel, bool immediate = true,
         Action<BasePanel> startAction = null,
         Action<BasePanel> finishAction = null)
     {
@@ -447,11 +462,12 @@ public class UIManager : MonoBehaviour
             if (_panelLinkedList.Count > 0)
             {
                 var stackTopPanelInfo = _panelLinkedList.Last.Value;
+
                 GetPanel(stackTopPanelInfo.Name)?.Focus();
             }
         }
 
-        panel.Hide(false, startAction, (p) =>
+        panel.Hide(immediate, startAction, (p) =>
         {
             finishAction?.Invoke(p);
 
@@ -483,7 +499,7 @@ public class UIManager : MonoBehaviour
         {
             if (info.Layer == panelInfo.Layer)
             {
-                ResetPanelOrder(info, (int)panelInfo.Layer, index);
+                ResetPanelOrder(info, (int) panelInfo.Layer, index);
                 index++;
             }
         }
@@ -500,6 +516,7 @@ public class UIManager : MonoBehaviour
         {
             canvas = panel.gameObject.AddComponent<Canvas>();
         }
+
         var gr = panel.GetComponent<GraphicRaycaster>();
         if (gr == null)
         {
@@ -510,7 +527,7 @@ public class UIManager : MonoBehaviour
         var startOrder = orderOffset + index * increment;
         canvas.sortingOrder = startOrder;
 
-        var canvasArr = panel.GetComponentsInChildren<Canvas>();
+        var canvasArr = panel.GetComponentsInChildren<Canvas>(true);
         foreach (var ca in canvasArr)
         {
             if (object.ReferenceEquals(ca, canvas)) continue;
@@ -534,9 +551,36 @@ public class UIManager : MonoBehaviour
             else
             {
                 originalVal = ca.sortingOrder;
-                _panelCanvasOriginalValDict.Add(info.Name, new Dictionary<string, int>() { { routePath, originalVal } });
+                _panelCanvasOriginalValDict.Add(info.Name, new Dictionary<string, int>() {{routePath, originalVal}});
             }
+
             ca.sortingOrder = startOrder + originalVal;
+        }
+
+        var particleArr = panel.GetComponentsInChildren<ParticleSystemRenderer>(true);
+        foreach (var pa in particleArr)
+        {
+            int originalVal = 0;
+            var routePath = GetRoute(pa.transform, canvas.transform);
+            if (_panelCanvasOriginalValDict.ContainsKey(info.Name))
+            {
+                if (_panelCanvasOriginalValDict[info.Name].ContainsKey(routePath))
+                {
+                    originalVal = _panelCanvasOriginalValDict[info.Name][routePath];
+                }
+                else
+                {
+                    originalVal = pa.sortingOrder;
+                    _panelCanvasOriginalValDict[info.Name].Add(routePath, originalVal);
+                }
+            }
+            else
+            {
+                originalVal = pa.sortingOrder;
+                _panelCanvasOriginalValDict.Add(info.Name, new Dictionary<string, int>() {{routePath, originalVal}});
+            }
+
+            pa.sortingOrder = startOrder + originalVal;
         }
     }
 
@@ -585,7 +629,18 @@ public class UIManager : MonoBehaviour
         while (node != null)
         {
             if (node.Value.Layer < panelInfo.Layer)
-                node = node.Next;
+            {
+                var nodeNext = node.Next;
+                if (nodeNext == null)
+                {
+                    _panelLinkedList.AddAfter(node, panelInfo);
+                    return;
+                }
+                else
+                {
+                    node = node.Next;
+                }
+            }
             else
             {
                 _panelLinkedList.AddAfter(node, panelInfo);
@@ -620,12 +675,12 @@ public class UIManager : MonoBehaviour
     private class WaitPanelInfo
     {
         public string tName = "";
-        public bool immediate = false;
+        public bool immediate = true;
         public Action<BasePanel> startAction = null;
         public Action<BasePanel> finishAction = null;
     }
 
-    public void AddPanelToWaitQueue<T>(bool immediate = false, Action<BasePanel> startAction = null,
+    public void AddPanelToWaitQueue<T>(bool immediate = true, Action<BasePanel> startAction = null,
         Action<BasePanel> finishAction = null)
         where T : BasePanel
     {
@@ -680,13 +735,13 @@ public class UIManager : MonoBehaviour
                 }
 
                 var panelInfo = _panelInfoDict[panelName];
-                if ((int)panelInfo.Life <= -1) continue;
+                if ((int) panelInfo.Life <= -1) continue;
 
                 if (panel.IsShowed || panel.IsShowInProgress) continue;
 
                 panel.LifeTimer += Time.deltaTime * _frameMax;
 
-                if (panel.LifeTimer > (int)panelInfo.Life)
+                if (panel.LifeTimer > (int) panelInfo.Life)
                 {
                     DestroyPanel(panelName);
                 }
@@ -698,27 +753,52 @@ public class UIManager : MonoBehaviour
 
     #region 其他UI内容
 
-    public Transform GetUILayerRoot(UILayer layer)
+    public RectTransform GetUILayerRoot(UILayer layer)
     {
-        return transform.Find($"Canvas/{layer.ToString()}");
+        if (_layerRootDict.ContainsKey(layer))
+            return _layerRootDict[layer];
+        else
+        {
+            var rect = transform.Find($"Canvas/{layer.ToString()}") as RectTransform;
+            _layerRootDict.Add(layer, rect);
+            return rect;
+        }
     }
 
     private bool CheckIsHaveHigherLayerInStack(UILayer curLayer)
     {
         foreach (var item in _panelLinkedList)
         {
-            var order = (int)item.Layer;
-            if (order != -1 && order > (int)curLayer)
+            var order = (int) item.Layer;
+            if (order != -1 && order > (int) curLayer)
             {
                 return true;
             }
         }
+
         return false;
     }
 
     #endregion
 
     #region Helper
+
+    public Vector2 GetWorldToUIPoint(Camera cam, Vector3 worldPos)
+    {
+        Vector2 uiPos;
+        var screenPos = cam.WorldToScreenPoint(worldPos);
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(GetUILayerRoot(UILayer.Guide), screenPos, UICamera, out uiPos);
+        return uiPos;
+    }
+
+    public Vector2 GetUIWorldToUIPoint(Vector3 worldPos)
+    {
+        Vector2 uiPos;
+        var screenPos = RectTransformUtility.WorldToScreenPoint(UICamera, worldPos);
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(GetUILayerRoot(UILayer.Guide), screenPos, UICamera, out uiPos);
+        return uiPos;
+    }
+    
     public bool GetIsPad()
     {
         return 1f * Screen.height / Screen.width < 1.77f;
@@ -733,7 +813,99 @@ public class UIManager : MonoBehaviour
             result = $"{parent.name}{splitter}{result}";
             parent = parent.parent;
         }
+
         return result;
+    }
+
+    #endregion
+
+    #region Toast
+
+    private UIToastPanel _uiToastPanel = null;
+
+    public void ShowToast(string str)
+    {
+        if (_uiToastPanel == null)
+        {
+            var prefab = Resources.Load<GameObject>("Toast/UIToastPanel");
+            var go = Instantiate(prefab);
+            go.transform.SetParent(GetUILayerRoot(UILayer.Tips), false);
+            _uiToastPanel = go.GetComponent<UIToastPanel>();
+        }
+
+        _uiToastPanel.ShowToast(str);
+    }
+
+    #endregion
+
+    #region Banner
+
+    public async void ShowBanner()
+    {
+        var bannerObj = await LoadAssetService.Instance.InstantiateByPrefab("Assets/AddressablesResources/Prefabs/UI/Item/BannerBottom.prefab");
+        var bannerBg = bannerObj.GetComponent<BannerBg>();
+        bannerBg.transform.SetParent(GetUILayerRoot(UILayer.Top), false);
+        bannerBg.ShowBanner();
+    }
+
+    #endregion
+
+    #region 加载图集
+
+    public Dictionary<string, SpriteAtlas> _atlasDict = new Dictionary<string, SpriteAtlas>();
+    public Dictionary<string, Task<SpriteAtlas>> _atlasTaskDict = new Dictionary<string, Task<SpriteAtlas>>();
+
+    public async void PreLoadAtlas(string atlasName)
+    {
+        if (_atlasDict.ContainsKey(atlasName)) return;
+        if (_atlasTaskDict.ContainsKey(atlasName)) return;
+
+        var atlas = await LoadAssetService.Instance.LoadAssetAsync<SpriteAtlas>(gameObject.name, atlasName);
+
+        if (!_atlasDict.ContainsKey(atlasName))
+        {
+            _atlasDict.Add(atlasName, atlas);
+        }
+    }
+
+    public async void LoadSpriteInAtlas(string atlasName, string spriteName, Action<Sprite> callBack)
+    {
+        if (_atlasDict.ContainsKey(atlasName))
+        {
+            callBack?.Invoke(_atlasDict[atlasName].GetSprite(spriteName));
+            return;
+        }
+
+        Task<SpriteAtlas> task = null;
+
+        if (_atlasTaskDict.ContainsKey(atlasName))
+        {
+            task = _atlasTaskDict[atlasName];
+        }
+        else
+        {
+            task = LoadAssetService.Instance.LoadAssetAsync<SpriteAtlas>(gameObject.name, atlasName);
+            _atlasTaskDict.Add(atlasName, task);
+        }
+
+        var atlas = await task;
+
+        if (!_atlasDict.ContainsKey(atlasName))
+        {
+            _atlasDict.Add(atlasName, atlas);
+        }
+
+        callBack?.Invoke(atlas.GetSprite(spriteName));
+    }
+
+    public void ReleaseAtlas(string atlasName)
+    {
+        LoadAssetService.Instance.ReleaseAssetSingle(atlasName);
+
+        if (_atlasDict.ContainsKey(atlasName))
+            _atlasDict.Remove(atlasName);
+        if (_atlasTaskDict.ContainsKey(atlasName))
+            _atlasTaskDict.Remove(atlasName);
     }
 
     #endregion
