@@ -628,23 +628,21 @@ public class UIManager : MonoBehaviour
         var node = _panelLinkedList.First;
         while (node != null)
         {
-            if (node.Value.Layer < panelInfo.Layer)
+            var nodeNext = node.Next;
+            if (nodeNext == null)
             {
-                var nodeNext = node.Next;
-                if (nodeNext == null)
+                _panelLinkedList.AddAfter(node, panelInfo);
+                return;
+            }
+            else
+            {
+                if (panelInfo.Layer >= node.Value.Layer && panelInfo.Layer < nodeNext.Value.Layer)
                 {
                     _panelLinkedList.AddAfter(node, panelInfo);
                     return;
                 }
                 else
-                {
                     node = node.Next;
-                }
-            }
-            else
-            {
-                _panelLinkedList.AddAfter(node, panelInfo);
-                return;
             }
         }
     }
